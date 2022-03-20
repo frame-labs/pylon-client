@@ -1,7 +1,7 @@
 {
-  "name": "@framelabs/pylon-db",
+  "name": "@framelabs/pylon-client",
   "version": "0.0.1",
-  "description": "Pylon client",
+  "description": "Pylon Client",
   "type": "module",
   "main": "build/index.js",
   "files": [
