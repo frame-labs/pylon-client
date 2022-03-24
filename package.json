@@ -1,11 +1,10 @@
 {
   "name": "@framelabs/pylon-client",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Pylon Client",
-  "type": "module",
-  "main": "build/index.js",
+  "main": "dist/index.js",
   "files": [
-    "build/**/*"
+    "dist/**/*"
   ],
   "scripts": {
     "test": "npm run build && jest --env=node --detectOpenHandles",

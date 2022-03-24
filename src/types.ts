@@ -4,5 +4,5 @@ export interface Subscription {
 }
 
 export interface Settings {
-  reconnect: Boolean
+  reconnect?: Boolean
 }

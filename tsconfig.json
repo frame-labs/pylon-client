@@ -1,9 +1,13 @@
 {
   "extends": "@tsconfig/node16/tsconfig.json",
   "compilerOptions": {
-    "module": "es2020",
+    "module": "CommonJS",
     "moduleResolution": "node",
-    "outDir": "build"
+    "outDir": "dist",
+
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "declaration": true
   },
   "include": ["src/**/*.ts"]
 }
