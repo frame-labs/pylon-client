@@ -12,6 +12,8 @@ class Pylon extends EventEmitter {
     reconnect: true
   }
   location: string
+  connected: boolean = false
+  destroyed: boolean = false
 
   constructor (location: string = '', settings: Settings = {}) {
     super()
@@ -21,12 +23,15 @@ class Pylon extends EventEmitter {
   }
 
   connect () {
+    this.disconnect()
     this.ws = new WebSocket(this.location)
     this.ws.on('open', this.open.bind(this))
     this.ws.on('message', this.message.bind(this))
     this.ws.on('ping', this.heartbeat.bind(this))
     this.ws.on('close', this.close.bind(this))
     this.ws.on('error', this.error.bind(this))
+    if (this.connectionTimer) clearTimeout(this.connectionTimer)
+    if (this.settings.reconnect) this.connectionTimer = setInterval(() => this.connect(), 15 * 1000)
   }
 
   heartbeat () {
@@ -42,7 +47,8 @@ class Pylon extends EventEmitter {
       this.sendPayload(subscription.type, subscription.data)
     })
 
-    this.emit('connection')
+    this.connected = true
+    this.emit('open')
   }
 
   message (data: any) {
@@ -59,13 +65,21 @@ class Pylon extends EventEmitter {
   }
 
   close () {
-    if (this.connectionTimer) clearTimeout(this.connectionTimer)
     if (this.pingTimeout) clearTimeout(this.pingTimeout)
-    if (this.settings.reconnect) this.connectionTimer = setInterval(() => this.connect(), 5000)
+    if (this.connectionTimer) clearTimeout(this.connectionTimer)
+    if (this.settings.reconnect && !this.destroyed) this.connectionTimer = setInterval(() => this.connect(), 5000)
+    this.connected = false
     this.emit('close')
   }
 
+  destroy () {
+    this.destroyed = true
+    this.disconnect()
+    this.removeAllListeners()
+  }
+
   error (err: NodeJS.ErrnoException) {
+    if (err.message === 'WebSocket was closed before the connection was established') return
     if (this.listenerCount('error') > 0) this.emit('error', err)
   }
 
@@ -73,7 +87,7 @@ class Pylon extends EventEmitter {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ method: method, params: params }))
     } else {
-      console.error('Pylon not connected')
+      this.error(new Error(`Pylon not connected when sending ${method}`))
     }
   }
 
