@@ -13,7 +13,7 @@ class Pylon extends EventEmitter {
   }
   location: string
 
-  constructor (location: string = '', settings: Settings) {
+  constructor (location: string = '', settings: Settings = {}) {
     super()
     this.location = location
     Object.assign(this.settings, settings)
