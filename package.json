@@ -1,6 +1,6 @@
 {
   "name": "@framelabs/pylon-client",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Pylon Client",
   "main": "dist/index.js",
   "files": [

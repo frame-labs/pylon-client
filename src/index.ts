@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events'
-import WebSocket from 'isomorphic-ws'
+import { WebSocket } from 'isomorphic-ws'
 
 import { Subscription, Settings } from './types'
 
@@ -126,4 +126,4 @@ class Pylon extends EventEmitter {
   }
 }
 
-export default Pylon
+module.exports = Pylon
