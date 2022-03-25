@@ -21,3 +21,34 @@ export function stringify (id: AssetId): CaipId {
 
   throw new Error(`could not stringify asset id with invalid type: ${id.type}`)
 }
+
+export function parse (id: CaipId): AssetId {
+  const segments = Object.fromEntries(id.split('/').map(segment => segment.split(':')))
+  const chainId = parseInt(segments.eip155)
+
+  if (!chainId) {
+    throw new Error(`attempted to parse asset id with invalid eip-155 chain id: ${id}`)
+  }
+
+  if ('slip44' in segments) {
+    // this is the SLIP44 native currency identifier
+    if (segments.slip44 !== '60') {
+      throw new Error(`attempted to parse non-Ethereum native currency asset id with id: ${id}`)
+    }
+
+    return {
+      type: AssetType.NativeCurrency,
+      chainId
+    }
+  }
+
+  if ('erc20' in segments) {
+    return {
+      type: AssetType.Token,
+      chainId,
+      address: segments.erc20.toLowerCase()
+    }
+  }
+
+  throw new Error(`attempted to parse asset id with unknown namespaces(s): ${id}`)
+}
