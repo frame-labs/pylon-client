@@ -1,7 +1,10 @@
 import { EventEmitter } from 'events'
 import { WebSocket } from 'isomorphic-ws'
+import { AssetId, AssetType, stringify } from './assetId'
 
 import { Subscription, Settings } from './types'
+
+//export type { AssetId, AssetType } from './assetId'
 
 class Pylon extends EventEmitter {
   ws?: WebSocket
@@ -91,10 +94,10 @@ class Pylon extends EventEmitter {
     }
   }
 
-  rates (assets: string[]) {
+  rates (assetIds: AssetId[]) {
     const subscription = {
       type: 'rates', 
-      data: assets
+      data: assetIds.map(stringify)
     }
 
     this.sendPayload(subscription.type, subscription.data)
@@ -126,4 +129,7 @@ class Pylon extends EventEmitter {
   }
 }
 
-module.exports = Pylon
+export = {
+  AssetType,
+  Pylon
+}
