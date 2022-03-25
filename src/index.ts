@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events'
 import { WebSocket } from 'isomorphic-ws'
-import { AssetId, AssetType, parse, stringify } from './assetId'
+import { AssetId, parse, stringify } from './assetId'
 
 import { Subscription, Settings, Rates } from './types'
 
