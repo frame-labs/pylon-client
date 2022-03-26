@@ -1,7 +1,10 @@
 import { EventEmitter } from 'events'
 import { WebSocket } from 'isomorphic-ws'
+import { AssetId, parse, stringify } from './assetId'
 
-import { Subscription, Settings } from './types'
+import { Subscription, Settings, Rates } from './types'
+
+export { AssetType } from './assetId'
 
 class Pylon extends EventEmitter {
   ws?: WebSocket
@@ -54,7 +57,13 @@ class Pylon extends EventEmitter {
   message (data: any) {
     try {
       const [event, ...params] = JSON.parse(data.toString())
-      this.emit(event, ...params)
+
+      if (event === 'rates') {
+        const rates = params[0] as Rates[]
+        this.emit('rates', rates.map(({ id, data }) => ({ id: parse(id), data })))
+      } else {
+        this.emit(event, ...params)
+      }
     } catch (e) {
       console.error('Error parsing message', e)
     }
@@ -91,10 +100,10 @@ class Pylon extends EventEmitter {
     }
   }
 
-  rates (assets: string[]) {
+  rates (assetIds: AssetId[]) {
     const subscription = {
       type: 'rates', 
-      data: assets
+      data: assetIds.map(stringify)
     }
 
     this.sendPayload(subscription.type, subscription.data)
@@ -126,4 +135,4 @@ class Pylon extends EventEmitter {
   }
 }
 
-module.exports = Pylon
+export default Pylon
