@@ -6,22 +6,37 @@ import { Subscription, Settings, Rates } from './types'
 
 export { AssetType } from './assetId'
 
-class Pylon extends EventEmitter {
-  ws?: WebSocket
-  pingTimeout?: NodeJS.Timeout
-  connectionTimer?: NodeJS.Timeout
-  subscriptions: Subscription[] = []
-  settings: Settings = {
-    reconnect: true
+function uniqueChainIds (uniqueIds: string[], assetId: AssetId) {
+  const chainId = assetId.chainId.toString()
+
+  if (!uniqueIds.includes(chainId)) {
+    uniqueIds.push(chainId)
   }
-  location: string
+
+  return uniqueIds
+}
+
+class Pylon extends EventEmitter {
+  // private
+  private ws?: WebSocket
+  private pingTimeout?: NodeJS.Timeout
+  private connectionTimer?: NodeJS.Timeout
+
+  private readonly location: string
+  private destroyed: boolean = false
+
+  private readonly subscriptions: Subscription[] = []
+  private readonly settings: Settings
+
+  // public
   connected: boolean = false
-  destroyed: boolean = false
 
   constructor (location: string = '', settings: Settings = {}) {
     super()
+
     this.location = location
-    Object.assign(this.settings, settings)
+    this.settings = { reconnect: true, ...settings }
+
     this.connect()
   }
 
@@ -100,33 +115,32 @@ class Pylon extends EventEmitter {
     }
   }
 
-  rates (assetIds: AssetId[]) {
-    const subscription = {
+  assets (assetIds: AssetId[]) {
+    // subscribe to rates
+    this.subscribe({
       type: 'rates', 
       data: assetIds.map(stringify)
-    }
+    })
 
-    this.sendPayload(subscription.type, subscription.data)
-
-    // Check subscriptions to see if this type of subscription already exists
-    const existingIndex = this.subscriptions.map(sub => sub.type).indexOf('monitorRates')
-    if (existingIndex !== -1) {
-      this.subscriptions[existingIndex] = subscription
-    } else {
-      this.subscriptions.push(subscription)
-    }    
+    // subscribe to chains
+    this.subscribe({
+      type: 'chains',
+      data: assetIds.reduce(uniqueChainIds, [])
+    })
   }
 
   inventories (accounts: string[]) {
-    const subscription = {
+    this.subscribe({
       type: 'inventories',
       data: accounts
-    }
+    })
+  }
 
+  private subscribe (subscription: Subscription) {
     this.sendPayload(subscription.type, subscription.data)
 
-    // Check subscriptions to see if this type of subscription exists yet
-    const existingIndex = this.subscriptions.map(sub => sub.type).indexOf('inventories')
+    // Check subscriptions to see if this type of subscription already exists
+    const existingIndex = this.subscriptions.findIndex(sub => sub.type === subscription.type)
     if (existingIndex !== -1) {
       this.subscriptions[existingIndex] = subscription
     } else {

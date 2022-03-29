@@ -1,5 +1,5 @@
 export interface Subscription {
-  type: string,
+  type: 'rates' | 'inventories' | 'chains',
   data: string[]
 }
 
