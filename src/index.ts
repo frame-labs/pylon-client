@@ -2,7 +2,7 @@ import { EventEmitter } from 'events'
 import { WebSocket } from 'isomorphic-ws'
 import { AssetId, parse, stringify } from './assetId'
 
-import { Subscription, Settings, Rates } from './types'
+import { Subscription, Settings, Rates, SubscriptionType } from './types'
 
 export { AssetType } from './assetId'
 
@@ -118,20 +118,20 @@ class Pylon extends EventEmitter {
   assets (assetIds: AssetId[]) {
     // subscribe to rates
     this.subscribe({
-      type: 'rates', 
+      type: SubscriptionType.Rates,
       data: assetIds.map(stringify)
     })
 
     // subscribe to chains
     this.subscribe({
-      type: 'chains',
+      type: SubscriptionType.Chains,
       data: assetIds.reduce(uniqueChainIds, [])
     })
   }
 
   inventories (accounts: string[]) {
     this.subscribe({
-      type: 'inventories',
+      type: SubscriptionType.Inventories,
       data: accounts
     })
   }
