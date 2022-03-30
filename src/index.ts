@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events'
-import { WebSocket } from 'isomorphic-ws'
+import WebSocket from 'isomorphic-ws'
 import { AssetId, parse, stringify } from './assetId'
 
 import { Subscription, Settings, Rates, SubscriptionType } from './types'
@@ -33,7 +33,6 @@ class Pylon extends EventEmitter {
 
   constructor (location: string = '', settings: Settings = {}) {
     super()
-
     this.location = location
     this.settings = { reconnect: true, ...settings }
 
@@ -43,18 +42,21 @@ class Pylon extends EventEmitter {
   connect () {
     this.disconnect()
     this.ws = new WebSocket(this.location)
-    this.ws.on('open', this.open.bind(this))
-    this.ws.on('message', this.message.bind(this))
-    this.ws.on('ping', this.heartbeat.bind(this))
-    this.ws.on('close', this.close.bind(this))
-    this.ws.on('error', this.error.bind(this))
+    this.ws.addEventListener('open', this.open.bind(this))
+    // @ts-ignore
+    this.ws.addEventListener('error', this.error.bind(this))
+    this.ws.addEventListener('message', this.message.bind(this))
+    // Fix heartbeat
+    // this.ws.addEventListener('ping', this.heartbeat.bind(this))
+    this.ws.addEventListener('close', this.close.bind(this))
+
     if (this.connectionTimer) clearTimeout(this.connectionTimer)
     if (this.settings.reconnect) this.connectionTimer = setInterval(() => this.connect(), 15 * 1000)
   }
 
   heartbeat () {
     if (this.pingTimeout) clearTimeout(this.pingTimeout)
-    this.pingTimeout = setTimeout(() => this.ws?.terminate(), 30000 + 2000)
+    this.pingTimeout = setTimeout(() => this.ws?.close(), 30000 + 2000)
   }
 
   open () {
@@ -69,9 +71,10 @@ class Pylon extends EventEmitter {
     this.emit('open')
   }
 
-  message (data: any) {
+  message (message: any) {
     try {
-      const [event, ...params] = JSON.parse(data.toString())
+      const [event, ...params] = JSON.parse(message.data.toString())
+      
 
       if (event === 'rates') {
         const rates = params[0] as Rates[]
@@ -85,7 +88,7 @@ class Pylon extends EventEmitter {
   }
 
   disconnect () {
-    this.ws?.terminate()
+    this.ws?.close()
   }
 
   close () {
@@ -113,6 +116,22 @@ class Pylon extends EventEmitter {
     } else {
       this.error(new Error(`Pylon not connected when sending ${method}`))
     }
+  }
+
+  rates (assetIds: string[]) {
+    // subscribe to rates
+    this.subscribe({
+      type: SubscriptionType.Rates,
+      data: assetIds
+    })
+  }
+
+  chains (chainIds: string[]) {
+    // subscribe to chains
+    this.subscribe({
+      type: SubscriptionType.Chains,
+      data: chainIds
+    })
   }
 
   assets (assetIds: AssetId[]) {
