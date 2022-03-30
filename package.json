@@ -27,6 +27,8 @@
   },
   "jest": {
     "testTimeout": 100,
+    "clearMocks": true,
+    "timers": "fake",
     "transform": {
       "^.+\\.[t|j]sx?$": "babel-jest"
     },
@@ -35,17 +37,21 @@
     ]
   },
   "babel": {
-    "presets": [
-      [
-        "@babel/preset-env",
-        {
-          "targets": {
-            "node": "16"
-          }
-        }
-      ],
-      "@babel/preset-typescript"
-    ]
+    "env": {
+      "test": {
+        "presets": [
+          [
+            "@babel/preset-env",
+            {
+              "targets": {
+                "node": "16"
+              }
+            }
+          ],
+          "@babel/preset-typescript"
+        ]
+      }
+    }
   },
   "directories": {
     "test": "test"
