@@ -1,5 +1,11 @@
+export enum SubscriptionType {
+  Rates = 'rates',
+  Inventories = 'inventories',
+  Chains = 'chains'
+}
+
 export interface Subscription {
-  type: string,
+  type: SubscriptionType,
   data: string[]
 }
 
