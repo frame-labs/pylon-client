@@ -73,6 +73,7 @@ describe('subscriptions', () => {
 
     expect(ws.send).toHaveBeenCalledTimes(1)
     expect(ws.send).toHaveBeenCalledWith(JSON.stringify({
+      // any duplicate chainIds should be removed
       method: 'chains', params: [ ['1', '137'] ]
     }))
   })
