@@ -45,8 +45,8 @@ describe('subscriptions', () => {
     }))
   })
 
-  it('subscribes to assets', () => {
-    pylon.assets([
+  it('subscribes to rates', () => {
+    pylon.rates([
       { chainId: 1, type: AssetType.NativeCurrency },
       { chainId: 1, type: AssetType.Token, address: '0xd3c89cac4a4283edba6927e2910fd1ebc14fe006' },
       { chainId: 137, type: AssetType.NativeCurrency }
@@ -54,7 +54,8 @@ describe('subscriptions', () => {
 
     const ws = WebSocket.mock.instances[0]
 
-    expect(ws.send).toHaveBeenNthCalledWith(1, JSON.stringify({
+    expect(ws.send).toHaveBeenCalledTimes(1)
+    expect(ws.send).toHaveBeenCalledWith(JSON.stringify({
       method: 'rates', params: [
         [
           'eip155:1/slip44:60',
@@ -63,8 +64,16 @@ describe('subscriptions', () => {
         ]
       ]
     }))
+  })
 
-    expect(ws.send).toHaveBeenNthCalledWith(2, JSON.stringify({
+  it('subscribes to chains', () => {
+    pylon.chains([1, 137, 1])
+
+    const ws = WebSocket.mock.instances[0]
+
+    expect(ws.send).toHaveBeenCalledTimes(1)
+    expect(ws.send).toHaveBeenCalledWith(JSON.stringify({
+      // any duplicate chainIds should be removed
       method: 'chains', params: [ ['1', '137'] ]
     }))
   })
