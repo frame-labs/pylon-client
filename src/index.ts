@@ -46,8 +46,6 @@ class Pylon extends EventEmitter {
     // @ts-ignore
     this.ws.addEventListener('error', this.error.bind(this))
     this.ws.addEventListener('message', this.message.bind(this))
-    // Fix heartbeat
-    // this.ws.addEventListener('ping', this.heartbeat.bind(this))
     this.ws.addEventListener('close', this.close.bind(this))
 
     if (this.connectionTimer) clearTimeout(this.connectionTimer)
@@ -55,6 +53,7 @@ class Pylon extends EventEmitter {
   }
 
   heartbeat () {
+    this.send('pong')
     if (this.pingTimeout) clearTimeout(this.pingTimeout)
     this.pingTimeout = setTimeout(() => this.ws?.close(), 30000 + 2000)
   }
@@ -64,7 +63,7 @@ class Pylon extends EventEmitter {
     this.heartbeat()
 
     this.subscriptions.forEach(subscription => {
-      this.sendPayload(subscription.type, subscription.data)
+      this.send(subscription.type, subscription.data)
     })
 
     this.connected = true
@@ -75,8 +74,9 @@ class Pylon extends EventEmitter {
     try {
       const [event, ...params] = JSON.parse(message.data.toString())
       
-
-      if (event === 'rates') {
+      if (event === 'ping') {
+        this.heartbeat()
+      } else if (event === 'rates') {
         const rates = params[0] as Rates[]
         this.emit('rates', rates.map(({ id, data }) => ({ id: parse(id), data })))
       } else {
@@ -110,7 +110,7 @@ class Pylon extends EventEmitter {
     if (this.listenerCount('error') > 0) this.emit('error', err)
   }
 
-  sendPayload (method: string, ...params: any[]) {
+  send (method: string, ...params: any[]) {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ method: method, params: params }))
     } else {
@@ -156,7 +156,7 @@ class Pylon extends EventEmitter {
   }
 
   private subscribe (subscription: Subscription) {
-    this.sendPayload(subscription.type, subscription.data)
+    this.send(subscription.type, subscription.data)
 
     // Check subscriptions to see if this type of subscription already exists
     const existingIndex = this.subscriptions.findIndex(sub => sub.type === subscription.type)
