@@ -51,6 +51,11 @@ class Pylon extends EventEmitter {
     if (this.settings.reconnect) this.connectionTimer = setInterval(() => this.connect(), 15 * 1000)
   }
 
+  clearTimers () {
+    if (this.pingTimeout) clearTimeout(this.pingTimeout)
+    if (this.connectionTimer) clearInterval(this.connectionTimer)
+  }
+
   onOpen () {
     if (this.connectionTimer) clearInterval(this.connectionTimer)
     this.heartbeat()
@@ -66,19 +71,18 @@ class Pylon extends EventEmitter {
   onClose () {
     // onClose should only be called as a result of the socket's close event
     // OR when close() is called manually and the socket either doesn't exist or is already in a closed state
-    if (this.pingTimeout) clearTimeout(this.pingTimeout)
-    if (this.connectionTimer) clearInterval(this.connectionTimer)
-    if (this.settings.reconnect && !this.destroyed) this.connectionTimer = setInterval(() => this.connect(), 5000)
-
+    this.clearTimers()
     if (this.ws) {
       this.removeAllSocketListeners()
       this.ws = undefined
     }
-
     this.connected = false
-
     this.emit('close')
-    this.removeAllListeners()
+    if (this.destroyed) {
+      this.removeAllListeners()
+    } else {
+      if (this.settings.reconnect) this.connectionTimer = setInterval(() => this.connect(), 5000)
+    }
   }
 
   onError (err: any) {
@@ -122,28 +126,25 @@ class Pylon extends EventEmitter {
   }
 
   disconnect () {
-    this.ws?.close()
+    if (this.ws?.terminate) {
+      this.ws?.terminate()
+    } else {
+      this.ws?.close()
+    }
   }
 
   close () {
+    this.destroyed = true
+    this.clearTimers()
     if (this.ws && WebSocket && this.ws.readyState !== WebSocket.CLOSED) {
       this.removeAllSocketListeners()
       this.addSocketListener('error', () => {})
       this.addSocketListener('close', this.onClose.bind(this))
-      if (this.ws.terminate) {
-        this.ws.terminate()
-      } else {
-        this.ws.close()
-      }
+
+      this.disconnect()
     } else {
       this.onClose()
     }
-  }
-
-  destroy () {
-    this.destroyed = true
-    this.disconnect()
-    this.removeAllListeners()
   }
 
   error (err: any) {
