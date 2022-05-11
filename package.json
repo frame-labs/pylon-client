@@ -1,6 +1,6 @@
 {
   "name": "@framelabs/pylon-client",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "Pylon Client",
   "main": "dist/index.js",
   "files": [
@@ -61,12 +61,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/frame-labs/pylon-db.git"
+    "url": "git+https://github.com/frame-labs/pylon-client.git"
   },
   "bugs": {
-    "url": "https://github.com/frame-labs/pylon-db/issues"
+    "url": "https://github.com/frame-labs/pylon-client/issues"
   },
-  "homepage": "https://github.com/frame-labs/pylon-db#readme",
+  "homepage": "https://github.com/frame-labs/pylon-client#readme",
   "dependencies": {
     "isomorphic-ws": "4.0.1",
     "ws": "8.6.0"
