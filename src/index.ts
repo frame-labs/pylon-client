@@ -2,7 +2,7 @@ import { EventEmitter } from 'events'
 import WebSocket from 'isomorphic-ws'
 import { AssetId, parse, stringify } from './assetId'
 
-import { Subscription, Settings, Rates, SubscriptionType } from './types'
+import { Subscription, Settings, Rates, SubscriptionType, Listener } from './types'
 
 export { AssetType } from './assetId'
 
@@ -24,6 +24,7 @@ class Pylon extends EventEmitter {
 
   private readonly location: string
   private destroyed: boolean = false
+  private socketListeners: Listener[] = []
 
   private readonly subscriptions: Subscription[] = []
   private readonly settings: Settings
@@ -35,30 +36,22 @@ class Pylon extends EventEmitter {
     super()
     this.location = location
     this.settings = { reconnect: true, ...settings }
-
     this.connect()
   }
 
   connect () {
     this.disconnect()
     this.ws = new WebSocket(this.location)
-    this.ws.addEventListener('open', this.open.bind(this))
-    // @ts-ignore
-    this.ws.addEventListener('error', this.error.bind(this))
-    this.ws.addEventListener('message', this.message.bind(this))
-    this.ws.addEventListener('close', this.close.bind(this))
+    this.addSocketListener('open', this.onOpen.bind(this))
+    this.addSocketListener('error', this.onError.bind(this))
+    this.addSocketListener('message', this.onMessage.bind(this))
+    this.addSocketListener('close', this.onClose.bind(this))
 
     if (this.connectionTimer) clearTimeout(this.connectionTimer)
     if (this.settings.reconnect) this.connectionTimer = setInterval(() => this.connect(), 15 * 1000)
   }
 
-  heartbeat () {
-    this.send('pong')
-    if (this.pingTimeout) clearTimeout(this.pingTimeout)
-    this.pingTimeout = setTimeout(() => this.ws?.close(), 30000 + 2000)
-  }
-
-  open () {
+  onOpen () {
     if (this.connectionTimer) clearTimeout(this.connectionTimer)
     this.heartbeat()
 
@@ -70,7 +63,30 @@ class Pylon extends EventEmitter {
     this.emit('open')
   }
 
-  message (message: any) {
+  onClose () {
+    // onClose should only be called as a result of the socket's close event
+    // OR when close() is called manually and the socket either doesn't exist or is already in a closed state
+    if (this.pingTimeout) clearTimeout(this.pingTimeout)
+    if (this.connectionTimer) clearTimeout(this.connectionTimer)
+    if (this.settings.reconnect && !this.destroyed) this.connectionTimer = setInterval(() => this.connect(), 5000)
+
+    if (this.ws) {
+      this.removeAllSocketListeners()
+      this.ws = undefined
+    }
+
+    this.connected = false
+
+    this.emit('close')
+    this.removeAllListeners()
+  }
+
+  onError (err: any) {
+    if (err.message === 'WebSocket was closed before the connection was established') return
+    if (this.listenerCount('error') > 0) this.emit('error', err)
+  }
+
+  onMessage (message: any) {
     try {
       const [event, ...params] = JSON.parse(message.data.toString())
       
@@ -87,16 +103,41 @@ class Pylon extends EventEmitter {
     }
   }
 
+  addSocketListener (method: any, handler: any) {
+    this.ws?.addEventListener(method, handler)
+    this.socketListeners.push({ method, handler })  
+  }
+
+  removeAllSocketListeners () {
+    this.socketListeners.forEach(({ method, handler }) => {
+      this.ws?.removeEventListener(method, handler)
+    })
+    this.socketListeners = []
+  }
+
+  heartbeat () {
+    this.send('pong')
+    if (this.pingTimeout) clearTimeout(this.pingTimeout)
+    this.pingTimeout = setTimeout(() => this.ws?.close(), 30000 + 2000)
+  }
+
   disconnect () {
     this.ws?.close()
   }
 
   close () {
-    if (this.pingTimeout) clearTimeout(this.pingTimeout)
-    if (this.connectionTimer) clearTimeout(this.connectionTimer)
-    if (this.settings.reconnect && !this.destroyed) this.connectionTimer = setInterval(() => this.connect(), 5000)
-    this.connected = false
-    this.emit('close')
+    if (this.ws && WebSocket && this.ws.readyState !== WebSocket.CLOSED) {
+      this.removeAllSocketListeners()
+      this.addSocketListener('error', () => {})
+      this.addSocketListener('close', this.onClose)
+      if (this.ws.terminate) {
+        this.ws.terminate()
+      } else {
+        this.ws.close()
+      }
+    } else {
+      this.onClose()
+    }
   }
 
   destroy () {
@@ -105,7 +146,7 @@ class Pylon extends EventEmitter {
     this.removeAllListeners()
   }
 
-  error (err: NodeJS.ErrnoException) {
+  error (err: any) {
     if (err.message === 'WebSocket was closed before the connection was established') return
     if (this.listenerCount('error') > 0) this.emit('error', err)
   }
