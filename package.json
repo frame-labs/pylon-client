@@ -1,6 +1,6 @@
 {
   "name": "@framelabs/pylon-client",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "Pylon Client",
   "main": "dist/index.js",
   "files": [
@@ -27,6 +27,8 @@
   },
   "jest": {
     "testTimeout": 100,
+    "clearMocks": true,
+    "timers": "fake",
     "transform": {
       "^.+\\.[t|j]sx?$": "babel-jest"
     },
@@ -35,17 +37,21 @@
     ]
   },
   "babel": {
-    "presets": [
-      [
-        "@babel/preset-env",
-        {
-          "targets": {
-            "node": "16"
-          }
-        }
-      ],
-      "@babel/preset-typescript"
-    ]
+    "env": {
+      "test": {
+        "presets": [
+          [
+            "@babel/preset-env",
+            {
+              "targets": {
+                "node": "16"
+              }
+            }
+          ],
+          "@babel/preset-typescript"
+        ]
+      }
+    }
   },
   "directories": {
     "test": "test"

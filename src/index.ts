@@ -6,11 +6,11 @@ import { Subscription, Settings, Rates, SubscriptionType, Listener } from './typ
 
 export { AssetType } from './assetId'
 
-function uniqueChainIds (uniqueIds: string[], assetId: AssetId) {
-  const chainId = assetId.chainId.toString()
+function dedupChainIds (uniqueIds: string[], chainId: number) {
+  const id = chainId.toString()
 
-  if (!uniqueIds.includes(chainId)) {
-    uniqueIds.push(chainId)
+  if (!uniqueIds.includes(id)) {
+    uniqueIds.push(id)
   }
 
   return uniqueIds
@@ -159,33 +159,17 @@ class Pylon extends EventEmitter {
     }
   }
 
-  rates (assetIds: string[]) {
-    // subscribe to rates
-    this.subscribe({
-      type: SubscriptionType.Rates,
-      data: assetIds
-    })
-  }
-
-  chains (chainIds: string[]) {
-    // subscribe to chains
-    this.subscribe({
-      type: SubscriptionType.Chains,
-      data: chainIds
-    })
-  }
-
-  assets (assetIds: AssetId[]) {
-    // subscribe to rates
+  rates (assetIds: AssetId[]) {
     this.subscribe({
       type: SubscriptionType.Rates,
       data: assetIds.map(stringify)
     })
+  }
 
-    // subscribe to chains
+  chains (chainIds: number[]) {
     this.subscribe({
       type: SubscriptionType.Chains,
-      data: assetIds.reduce(uniqueChainIds, [])
+      data: chainIds.reduce(dedupChainIds, [])
     })
   }
 
