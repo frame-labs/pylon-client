@@ -28,7 +28,10 @@
   "jest": {
     "testTimeout": 100,
     "clearMocks": true,
-    "timers": "fake",
+    "fakeTimers": {
+      "enableGlobally": true,
+      "legacyFakeTimers": true
+    },
     "transform": {
       "^.+\\.[t|j]sx?$": "babel-jest"
     },

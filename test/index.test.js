@@ -9,8 +9,9 @@ let pylon
 beforeAll(() => {
   WebSocket.mockImplementation(function () {
     const e = new EventEmitter()
-    this.emit = e.emit
-    this.on = e.on
+    this.emit = e.emit.bind(e)
+    this.on = e.on.bind(e)
+    this.addEventListener = e.addListener.bind(e)
     this.readyState = 1
 
     return this
@@ -89,7 +90,7 @@ describe('subscriptions', () => {
 
     const ws = WebSocket.mock.instances[0]
     ws.send.mockClear()
-    pylon.onOpen()
+    ws.emit('open')
     expect(ws.send).toHaveBeenCalledTimes(2)
     expect(ws.send).toHaveBeenCalledWith(JSON.stringify({
       method: 'pong', params: []
