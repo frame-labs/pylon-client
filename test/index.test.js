@@ -9,8 +9,9 @@ let pylon
 beforeAll(() => {
   WebSocket.mockImplementation(function () {
     const e = new EventEmitter()
-    this.emit = e.emit
-    this.on = e.on
+    this.emit = e.emit.bind(e)
+    this.on = e.on.bind(e)
+    this.addEventListener = e.addListener.bind(e)
     this.readyState = 1
 
     return this
@@ -18,7 +19,11 @@ beforeAll(() => {
 })
 
 beforeEach(() => {
-  pylon = new Pylon('ws://127.0.0.1:9000')
+  pylon = new Pylon('wss://data.pylon.link')
+})
+
+afterEach(() => {
+  pylon.close()
 })
 
 describe('Database Setup', () => {
@@ -86,8 +91,10 @@ describe('subscriptions', () => {
     const ws = WebSocket.mock.instances[0]
     ws.send.mockClear()
     ws.emit('open')
-
-    expect(ws.send).toHaveBeenCalledTimes(1)
+    expect(ws.send).toHaveBeenCalledTimes(2)
+    expect(ws.send).toHaveBeenCalledWith(JSON.stringify({
+      method: 'pong', params: []
+    }))
     expect(ws.send).toHaveBeenCalledWith(JSON.stringify({
       method: 'inventories', params: [['0xd3c89cac4a4283edba6927e2910fd1ebc14fe006']]
     }))

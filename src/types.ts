@@ -17,3 +17,8 @@ export interface Rates {
   id: string,
   data: any
 }
+
+export interface Listener {
+  method: any,
+  handler: (event: any) => void
+}
