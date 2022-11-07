@@ -39,7 +39,21 @@ class Pylon extends EventEmitter {
     this.connect()
   }
 
-  connect () {
+  close () {
+    this.destroyed = true
+    this.clearTimers()
+    if (this.ws && WebSocket && this.ws.readyState !== WebSocket.CLOSED) {
+      this.removeAllSocketListeners()
+      this.addSocketListener('error', () => {})
+      this.addSocketListener('close', this.onClose.bind(this))
+
+      this.disconnect()
+    } else {
+      this.onClose()
+    }
+  }
+
+  private connect () {
     this.disconnect()
     this.ws = new WebSocket(this.location)
     this.addSocketListener('open', this.onOpen.bind(this))
@@ -51,12 +65,20 @@ class Pylon extends EventEmitter {
     if (this.settings.reconnect) this.connectionTimer = setInterval(() => this.connect(), 15 * 1000)
   }
 
-  clearTimers () {
+  private disconnect () {
+    if (this.ws?.terminate) {
+      this.ws?.terminate()
+    } else {
+      this.ws?.close()
+    }
+  }
+
+  private clearTimers () {
     if (this.pingTimeout) clearTimeout(this.pingTimeout)
     if (this.connectionTimer) clearInterval(this.connectionTimer)
   }
 
-  onOpen () {
+  private onOpen () {
     if (this.connectionTimer) clearInterval(this.connectionTimer)
     this.heartbeat()
 
@@ -68,7 +90,7 @@ class Pylon extends EventEmitter {
     this.emit('open')
   }
 
-  onClose () {
+  private onClose () {
     // onClose should only be called as a result of the socket's close event
     // OR when close() is called manually and the socket either doesn't exist or is already in a closed state
     this.clearTimers()
@@ -85,12 +107,7 @@ class Pylon extends EventEmitter {
     }
   }
 
-  onError (err: any) {
-    if (err.message === 'WebSocket was closed before the connection was established') return
-    if (this.listenerCount('error') > 0) this.emit('error', err)
-  }
-
-  onMessage (message: any) {
+  private onMessage (message: any) {
     try {
       const [event, ...params] = JSON.parse(message.data.toString())
       
@@ -107,59 +124,38 @@ class Pylon extends EventEmitter {
     }
   }
 
-  addSocketListener (method: any, handler: any) {
+  private onError (err: any) {
+    if (err.message === 'WebSocket was closed before the connection was established') return
+    if (this.listenerCount('error') > 0) this.emit('error', err)
+  }
+
+  private addSocketListener (method: any, handler: any) {
     this.ws?.addEventListener(method, handler)
     this.socketListeners.push({ method, handler })  
   }
 
-  removeAllSocketListeners () {
+  private removeAllSocketListeners () {
     this.socketListeners.forEach(({ method, handler }) => {
       this.ws?.removeEventListener(method, handler)
     })
     this.socketListeners = []
   }
 
-  heartbeat () {
+  private heartbeat () {
     this.send('pong')
     if (this.pingTimeout) clearTimeout(this.pingTimeout)
     this.pingTimeout = setTimeout(() => this.ws?.close(), 30000 + 2000)
   }
 
-  disconnect () {
-    if (this.ws?.terminate) {
-      this.ws?.terminate()
-    } else {
-      this.ws?.close()
-    }
-  }
-
-  close () {
-    this.destroyed = true
-    this.clearTimers()
-    if (this.ws && WebSocket && this.ws.readyState !== WebSocket.CLOSED) {
-      this.removeAllSocketListeners()
-      this.addSocketListener('error', () => {})
-      this.addSocketListener('close', this.onClose.bind(this))
-
-      this.disconnect()
-    } else {
-      this.onClose()
-    }
-  }
-
-  error (err: any) {
-    if (err.message === 'WebSocket was closed before the connection was established') return
-    if (this.listenerCount('error') > 0) this.emit('error', err)
-  }
-
-  send (method: string, ...params: any[]) {
+  private send (method: string, ...params: any[]) {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ method: method, params: params }))
     } else {
-      this.error(new Error(`Pylon not connected when sending ${method}`))
+      this.onError(new Error(`Pylon not connected when sending ${method}`))
     }
   }
 
+  // subscription methods
   rates (assetIds: AssetId[]) {
     this.subscribe({
       type: SubscriptionType.Rates,
