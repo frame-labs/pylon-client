@@ -69,8 +69,8 @@ class Pylon extends EventEmitter {
       this.onError(e as Error)
     })
 
-    this.addSocketListener('close', (e: unknown) => {
-      log.info('received socket close event', e)
+    this.addSocketListener('close', () => {
+      log.debug('received socket close event')
       this.onClose()
     })
   }
@@ -117,9 +117,7 @@ class Pylon extends EventEmitter {
     } else {
       if (this.settings.reconnect) {
         log.debug(`connection closed, will re-attempt connection in ${RETRY_TIMEOUT}ms`)
-        this.connectionTimer = setTimeout(() => {
-          this.connect()
-        }, RETRY_TIMEOUT)
+        this.connectionTimer = setTimeout(() => this.connect(), RETRY_TIMEOUT)
       }
     }
   }
@@ -143,9 +141,7 @@ class Pylon extends EventEmitter {
 
   private onError (err: Error) {
     if (err.message === 'WebSocket was closed before the connection was established') return
-    if (this.listenerCount('error') > 0) {
-      this.emit('error', err)
-    }
+    if (this.listenerCount('error') > 0) this.emit('error', err)
   }
 
   private addSocketListener (method: any, handler: any) {
@@ -164,9 +160,7 @@ class Pylon extends EventEmitter {
   private heartbeat () {
     this.send('pong')
     if (this.pingTimeout) clearTimeout(this.pingTimeout)
-    this.pingTimeout = setTimeout(() => {
-      this.ws?.close()
-    }, 30000 + 2000)
+    this.pingTimeout = setTimeout(() => this.ws?.close(), 30000 + 2000)
   }
 
   private send (method: string, ...params: any[]) {
