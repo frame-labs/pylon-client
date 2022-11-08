@@ -45,16 +45,17 @@ describe('Database Setup', () => {
 })
 
 it('handles reconnecting when the network is not available', () => {
-  // while waiting for a connect event from the first socket, trigger the reconnect mechanism
-  jest.advanceTimersByTime(15000)
-
-  // fire close event from first socket, removing all listeners from both sockets
+  // fire close event from first socket, removing all listeners
   WebSocket.mock.instances[0].emit('error', new Error('could not connect!'))
   WebSocket.mock.instances[0].emit('close')
 
+  jest.advanceTimersByTime(5000)
+
   // fire error event from second socket, which now has no listeners
-  WebSocket.mock.instances[1].emit('error', new Error('could not find DNS!'))
-}, 100)
+  WebSocket.mock.instances[1].emit('open')
+
+  expect(pylon.connected).toBe(true)
+})
 
 describe('subscriptions', () => {
   it('subscribes to inventories', () => {

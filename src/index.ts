@@ -1,8 +1,8 @@
-// @ts-nocheck
 import { EventEmitter } from 'events'
 import WebSocket from 'isomorphic-ws'
-import { AssetId, parse, stringify } from './assetId'
 
+import log from './logger'
+import { AssetId, parse, stringify } from './assetId'
 import { Subscription, Settings, Rates, SubscriptionType, Listener } from './types'
 
 export { AssetType } from './assetId'
@@ -17,10 +17,6 @@ function dedupChainIds (uniqueIds: string[], chainId: number) {
   return uniqueIds
 }
 let id = 1
-
-function log (d, ...args) {
-  console.log(`[ ${new Date().toISOString()} ] ${d}`, ...args)
-}
 
 class Pylon extends EventEmitter {
   // private
@@ -60,46 +56,34 @@ class Pylon extends EventEmitter {
   }
 
   private connect () {
-    log('trying to connect ... ')
-    try {
-      const ws = new WebSocket(this.location)
-      // @ts-ignore
-      ws.id = id++
+    log.debug(`connecting to ${this.location}`)
 
-      this.ws = ws
+    const ws = new WebSocket(this.location)
+    // @ts-ignore
+    ws.id = id++
 
-      // @ts-ignore
-      log('created ws object', { id: ws.id })
-      this.addSocketListener('open', e => {
-        log('OPEN EVENT', { id: ws.id })
-        this.onOpen(e)
-      })
+    this.ws = ws
 
-      this.addSocketListener('error', e => {
-        log('ERROR EVENT', { id: ws.id })
-        this.onError(e, ws.id)
-      })
+    this.addSocketListener('open', this.onOpen.bind(this))
+    this.addSocketListener('message', this.onMessage.bind(this))
 
-      this.addSocketListener('message', e => {
-        //console.log('MESSAGE EVENT', e, { id: ws.id })
-        this.onMessage(e)
-      })
+    this.addSocketListener('error', (e: unknown) => {
+      log.warn('received socket error', e)
+      this.onError(e as Error)
+    })
 
-      this.addSocketListener('close', e => {
-        log('CLOSE EVENT', { id: ws.id })
-        this.onClose(e)
-      })
-    } catch (e) {
-      log('error constructing ws object', e)
-    }
+    this.addSocketListener('close', (e: unknown) => {
+      log.info('received socket close event', e)
+      this.onClose()
+    })
   }
 
   private async disconnect () {
+    log.debug(`disconnecting from ${this.location}`)
+
     if (this.ws?.terminate) {
-      log('TERMINATE')
       this.ws?.terminate()
     } else {
-      log('NOT TERMINATE')
       this.ws?.close()
     }
   }
@@ -110,7 +94,6 @@ class Pylon extends EventEmitter {
   }
 
   private onOpen () {
-    log('OPEN!')
     if (this.connectionTimer) clearTimeout(this.connectionTimer)
     this.heartbeat()
 
@@ -135,7 +118,10 @@ class Pylon extends EventEmitter {
     if (this.destroyed) {
       this.removeAllListeners()
     } else {
-      if (this.settings.reconnect) this.connectionTimer = setTimeout(() => { log('onClose connection timer fired!'); this.connect() }, 5000)
+      if (this.settings.reconnect) this.connectionTimer = setTimeout(() => {
+        log.debug('attempting re-connect')
+        this.connect()
+      }, 5000)
     }
   }
 
@@ -156,26 +142,23 @@ class Pylon extends EventEmitter {
     }
   }
 
-  private onError (err: any, id: number) {
-    log('onError!', err.message, { id })
+  private onError (err: Error) {
     if (err.message === 'WebSocket was closed before the connection was established') return
     if (this.listenerCount('error') > 0) {
-      log('**** EMITTING ERROR')
       this.emit('error', err)
     }
   }
 
   private addSocketListener (method: any, handler: any) {
-    log('addSocketListener', { method, id: this.ws.id })
     this.ws?.addEventListener(method, handler)
     this.socketListeners.push({ method, handler })
   }
 
   private removeAllSocketListeners () {
     this.socketListeners.forEach(({ method, handler }) => {
-      log('REMOVE LISTENER --> ', { method, id: this.ws.id })
       this.ws?.removeEventListener(method, handler)
     })
+
     this.socketListeners = []
   }
 
@@ -183,7 +166,6 @@ class Pylon extends EventEmitter {
     this.send('pong')
     if (this.pingTimeout) clearTimeout(this.pingTimeout)
     this.pingTimeout = setTimeout(() => {
-      log('PING TIMEOUT!')
       this.ws?.close()
     }, 30000 + 2000)
   }
@@ -192,7 +174,7 @@ class Pylon extends EventEmitter {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ method: method, params: params }))
     } else {
-      //this.onError(new Error(`Pylon not connected when sending ${method}`))
+      this.onError(new Error(`Pylon not connected when sending ${method}`))
     }
   }
 
