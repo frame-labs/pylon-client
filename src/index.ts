@@ -7,6 +7,8 @@ import { Subscription, Settings, Rates, SubscriptionType, Listener } from './typ
 
 export { AssetType } from './assetId'
 
+const RETRY_TIMEOUT = 5000
+
 function dedupChainIds (uniqueIds: string[], chainId: number) {
   const id = chainId.toString()
 
@@ -16,7 +18,6 @@ function dedupChainIds (uniqueIds: string[], chainId: number) {
 
   return uniqueIds
 }
-let id = 1
 
 class Pylon extends EventEmitter {
   // private
@@ -58,11 +59,7 @@ class Pylon extends EventEmitter {
   private connect () {
     log.debug(`connecting to ${this.location}`)
 
-    const ws = new WebSocket(this.location)
-    // @ts-ignore
-    ws.id = id++
-
-    this.ws = ws
+    this.ws = new WebSocket(this.location)
 
     this.addSocketListener('open', this.onOpen.bind(this))
     this.addSocketListener('message', this.onMessage.bind(this))
@@ -118,10 +115,12 @@ class Pylon extends EventEmitter {
     if (this.destroyed) {
       this.removeAllListeners()
     } else {
-      if (this.settings.reconnect) this.connectionTimer = setTimeout(() => {
-        log.debug('attempting re-connect')
-        this.connect()
-      }, 5000)
+      if (this.settings.reconnect) {
+        log.debug(`connection closed, will re-attempt connection in ${RETRY_TIMEOUT}ms`)
+        this.connectionTimer = setTimeout(() => {
+          this.connect()
+        }, RETRY_TIMEOUT)
+      }
     }
   }
 
