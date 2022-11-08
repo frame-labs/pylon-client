@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { EventEmitter } from 'events'
 import WebSocket from 'isomorphic-ws'
 import { AssetId, parse, stringify } from './assetId'
@@ -14,6 +15,11 @@ function dedupChainIds (uniqueIds: string[], chainId: number) {
   }
 
   return uniqueIds
+}
+let id = 1
+
+function log (d, ...args) {
+  console.log(`[ ${new Date().toISOString()} ] ${d}`, ...args)
 }
 
 class Pylon extends EventEmitter {
@@ -54,32 +60,58 @@ class Pylon extends EventEmitter {
   }
 
   private connect () {
-    this.disconnect()
-    this.ws = new WebSocket(this.location)
-    this.addSocketListener('open', this.onOpen.bind(this))
-    this.addSocketListener('error', this.onError.bind(this))
-    this.addSocketListener('message', this.onMessage.bind(this))
-    this.addSocketListener('close', this.onClose.bind(this))
+    log('trying to connect ... ')
+    try {
+      const ws = new WebSocket(this.location)
+      // @ts-ignore
+      ws.id = id++
 
-    if (this.connectionTimer) clearInterval(this.connectionTimer)
-    if (this.settings.reconnect) this.connectionTimer = setInterval(() => this.connect(), 15 * 1000)
+      this.ws = ws
+
+      // @ts-ignore
+      log('created ws object', { id: ws.id })
+      this.addSocketListener('open', e => {
+        log('OPEN EVENT', { id: ws.id })
+        this.onOpen(e)
+      })
+
+      this.addSocketListener('error', e => {
+        log('ERROR EVENT', { id: ws.id })
+        this.onError(e, ws.id)
+      })
+
+      this.addSocketListener('message', e => {
+        //console.log('MESSAGE EVENT', e, { id: ws.id })
+        this.onMessage(e)
+      })
+
+      this.addSocketListener('close', e => {
+        log('CLOSE EVENT', { id: ws.id })
+        this.onClose(e)
+      })
+    } catch (e) {
+      log('error constructing ws object', e)
+    }
   }
 
-  private disconnect () {
+  private async disconnect () {
     if (this.ws?.terminate) {
+      log('TERMINATE')
       this.ws?.terminate()
     } else {
+      log('NOT TERMINATE')
       this.ws?.close()
     }
   }
 
   private clearTimers () {
     if (this.pingTimeout) clearTimeout(this.pingTimeout)
-    if (this.connectionTimer) clearInterval(this.connectionTimer)
+    if (this.connectionTimer) clearTimeout(this.connectionTimer)
   }
 
   private onOpen () {
-    if (this.connectionTimer) clearInterval(this.connectionTimer)
+    log('OPEN!')
+    if (this.connectionTimer) clearTimeout(this.connectionTimer)
     this.heartbeat()
 
     this.subscriptions.forEach(subscription => {
@@ -103,7 +135,7 @@ class Pylon extends EventEmitter {
     if (this.destroyed) {
       this.removeAllListeners()
     } else {
-      if (this.settings.reconnect) this.connectionTimer = setInterval(() => this.connect(), 5000)
+      if (this.settings.reconnect) this.connectionTimer = setTimeout(() => { log('onClose connection timer fired!'); this.connect() }, 5000)
     }
   }
 
@@ -124,18 +156,24 @@ class Pylon extends EventEmitter {
     }
   }
 
-  private onError (err: any) {
+  private onError (err: any, id: number) {
+    log('onError!', err.message, { id })
     if (err.message === 'WebSocket was closed before the connection was established') return
-    if (this.listenerCount('error') > 0) this.emit('error', err)
+    if (this.listenerCount('error') > 0) {
+      log('**** EMITTING ERROR')
+      this.emit('error', err)
+    }
   }
 
   private addSocketListener (method: any, handler: any) {
+    log('addSocketListener', { method, id: this.ws.id })
     this.ws?.addEventListener(method, handler)
-    this.socketListeners.push({ method, handler })  
+    this.socketListeners.push({ method, handler })
   }
 
   private removeAllSocketListeners () {
     this.socketListeners.forEach(({ method, handler }) => {
+      log('REMOVE LISTENER --> ', { method, id: this.ws.id })
       this.ws?.removeEventListener(method, handler)
     })
     this.socketListeners = []
@@ -144,14 +182,17 @@ class Pylon extends EventEmitter {
   private heartbeat () {
     this.send('pong')
     if (this.pingTimeout) clearTimeout(this.pingTimeout)
-    this.pingTimeout = setTimeout(() => this.ws?.close(), 30000 + 2000)
+    this.pingTimeout = setTimeout(() => {
+      log('PING TIMEOUT!')
+      this.ws?.close()
+    }, 30000 + 2000)
   }
 
   private send (method: string, ...params: any[]) {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ method: method, params: params }))
     } else {
-      this.onError(new Error(`Pylon not connected when sending ${method}`))
+      //this.onError(new Error(`Pylon not connected when sending ${method}`))
     }
   }
 
