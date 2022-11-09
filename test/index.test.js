@@ -1,18 +1,15 @@
-import Pylon, { AssetType } from '../'
 import { EventEmitter } from 'events'
 import { WebSocket } from 'isomorphic-ws'
+
+import Pylon, { AssetType } from '..'
 
 jest.mock('isomorphic-ws')
 
 let pylon
-let id = 1
 
 beforeAll(() => {
-  jest.useFakeTimers()
-
   WebSocket.mockImplementation(function () {
     const e = new EventEmitter()
-    this.id = id++
     this.emit = e.emit.bind(e)
     this.on = e.on.bind(e)
     this.addEventListener = e.addListener.bind(e)
