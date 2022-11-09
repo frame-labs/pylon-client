@@ -3,7 +3,7 @@ import WebSocket from 'isomorphic-ws'
 
 import log from './logger'
 import { AssetId, parse, stringify } from './assetId'
-import { Subscription, Settings, Rates, SubscriptionType, Listener } from './types'
+import { Subscription, Settings, Rates, SubscriptionType, Listener, SocketEvent } from './types'
 
 export { AssetType } from './assetId'
 
@@ -62,9 +62,9 @@ class Pylon extends EventEmitter {
     this.ws = new WebSocket(this.location)
 
     this.addSocketListener('open', this.onOpen.bind(this))
-    this.addSocketListener('message', this.onMessage.bind(this))
+    this.addSocketListener('message', (message) => this.onMessage(message as WebSocket.MessageEvent))
 
-    this.addSocketListener('error', (e: unknown) => {
+    this.addSocketListener('error', (e) => {
       log.warn('received socket error', e)
       this.onError(e as Error)
     })
@@ -121,7 +121,7 @@ class Pylon extends EventEmitter {
     }
   }
 
-  private onMessage (message: any) {
+  private onMessage (message: WebSocket.MessageEvent) {
     try {
       const [event, ...params] = JSON.parse(message.data.toString())
       
@@ -143,14 +143,14 @@ class Pylon extends EventEmitter {
     if (this.listenerCount('error') > 0) this.emit('error', err)
   }
 
-  private addSocketListener (method: any, handler: any) {
-    this.ws?.addEventListener(method, handler)
+  private addSocketListener (method: SocketEvent, handler: (event: unknown) => void) {
+    this.ws?.addEventListener(method as any, handler as any)
     this.socketListeners.push({ method, handler })
   }
 
   private removeAllSocketListeners () {
     this.socketListeners.forEach(({ method, handler }) => {
-      this.ws?.removeEventListener(method, handler)
+      this.ws?.removeEventListener(method as any, handler)
     })
 
     this.socketListeners = []
@@ -162,7 +162,7 @@ class Pylon extends EventEmitter {
     this.pingTimeout = setTimeout(() => this.ws?.close(), 30000 + 2000)
   }
 
-  private send (method: string, ...params: any[]) {
+  private send (method: string, ...params: unknown[]) {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ method: method, params: params }))
     } else {
