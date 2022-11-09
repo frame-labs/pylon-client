@@ -91,7 +91,6 @@ class Pylon extends EventEmitter {
   }
 
   private onOpen () {
-    if (this.connectionTimer) clearTimeout(this.connectionTimer)
     this.heartbeat()
 
     this.subscriptions.forEach(subscription => {
