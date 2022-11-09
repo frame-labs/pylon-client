@@ -1,6 +1,7 @@
-import Pylon, { AssetType } from '../'
 import { EventEmitter } from 'events'
 import { WebSocket } from 'isomorphic-ws'
+
+import Pylon, { AssetType } from '..'
 
 jest.mock('isomorphic-ws')
 
@@ -12,6 +13,8 @@ beforeAll(() => {
     this.emit = e.emit.bind(e)
     this.on = e.on.bind(e)
     this.addEventListener = e.addListener.bind(e)
+    this.removeEventListener = e.removeListener.bind(e)
+    this.listenerCount = e.listenerCount.bind(e)
     this.readyState = 1
 
     return this
@@ -36,6 +39,17 @@ describe('Database Setup', () => {
       })
     })
   }, 1000)
+})
+
+it('handles reconnecting when the network is not available', () => {
+  WebSocket.mock.instances[0].emit('error', new Error('could not connect!'))
+  WebSocket.mock.instances[0].emit('close')
+
+  jest.advanceTimersByTime(5000)
+
+  WebSocket.mock.instances[1].emit('open')
+
+  expect(pylon.connected).toBe(true)
 })
 
 describe('subscriptions', () => {

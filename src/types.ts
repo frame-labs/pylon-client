@@ -1,3 +1,7 @@
+import type { Event } from 'ws'
+
+export type SocketEvent = 'open' | 'close' | 'message' | 'error'
+
 export enum SubscriptionType {
   Rates = 'rates',
   Inventories = 'inventories',
@@ -5,7 +9,7 @@ export enum SubscriptionType {
 }
 
 export interface Subscription {
-  type: SubscriptionType,
+  type: SubscriptionType
   data: string[]
 }
 
@@ -14,11 +18,11 @@ export interface Settings {
 }
 
 export interface Rates {
-  id: string,
+  id: string
   data: any
 }
 
 export interface Listener {
-  method: any,
-  handler: (event: any) => void
+  method: SocketEvent
+  handler: (event: Event) => void
 }
