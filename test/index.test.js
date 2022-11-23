@@ -54,35 +54,43 @@ it('handles reconnecting when the network is not available', () => {
 
 describe('subscriptions', () => {
   it('subscribes to inventories', () => {
-    pylon.inventories([
-      '0xd3c89cac4a4283edba6927e2910fd1ebc14fe006'
-    ])
+    pylon.inventories(['0xd3c89cac4a4283edba6927e2910fd1ebc14fe006'])
 
     const ws = WebSocket.mock.instances[0]
-    expect(ws.send).toHaveBeenCalledWith(JSON.stringify({
-      method: 'inventories', params: [['0xd3c89cac4a4283edba6927e2910fd1ebc14fe006']]
-    }))
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        method: 'inventories',
+        params: [['0xd3c89cac4a4283edba6927e2910fd1ebc14fe006']]
+      })
+    )
   })
 
   it('subscribes to rates', () => {
     pylon.rates([
       { chainId: 1, type: AssetType.NativeCurrency },
-      { chainId: 1, type: AssetType.Token, address: '0xd3c89cac4a4283edba6927e2910fd1ebc14fe006' },
+      {
+        chainId: 1,
+        type: AssetType.Token,
+        address: '0xd3c89cac4a4283edba6927e2910fd1ebc14fe006'
+      },
       { chainId: 137, type: AssetType.NativeCurrency }
     ])
 
     const ws = WebSocket.mock.instances[0]
 
     expect(ws.send).toHaveBeenCalledTimes(1)
-    expect(ws.send).toHaveBeenCalledWith(JSON.stringify({
-      method: 'rates', params: [
-        [
-          'eip155:1/slip44:60',
-          'eip155:1/erc20:0xd3c89cac4a4283edba6927e2910fd1ebc14fe006',
-          'eip155:137/slip44:60'
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        method: 'rates',
+        params: [
+          [
+            'eip155:1/slip44:60',
+            'eip155:1/erc20:0xd3c89cac4a4283edba6927e2910fd1ebc14fe006',
+            'eip155:137/slip44:60'
+          ]
         ]
-      ]
-    }))
+      })
+    )
   })
 
   it('subscribes to chains', () => {
@@ -91,26 +99,33 @@ describe('subscriptions', () => {
     const ws = WebSocket.mock.instances[0]
 
     expect(ws.send).toHaveBeenCalledTimes(1)
-    expect(ws.send).toHaveBeenCalledWith(JSON.stringify({
-      // any duplicate chainIds should be removed
-      method: 'chains', params: [ ['1', '137'] ]
-    }))
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        // any duplicate chainIds should be removed
+        method: 'chains',
+        params: [['1', '137']]
+      })
+    )
   })
 
   it('stores subscriptions on reconnect', () => {
-    pylon.inventories([
-      '0xd3c89cac4a4283edba6927e2910fd1ebc14fe006'
-    ])
+    pylon.inventories(['0xd3c89cac4a4283edba6927e2910fd1ebc14fe006'])
 
     const ws = WebSocket.mock.instances[0]
     ws.send.mockClear()
     ws.emit('open')
     expect(ws.send).toHaveBeenCalledTimes(2)
-    expect(ws.send).toHaveBeenCalledWith(JSON.stringify({
-      method: 'pong', params: []
-    }))
-    expect(ws.send).toHaveBeenCalledWith(JSON.stringify({
-      method: 'inventories', params: [['0xd3c89cac4a4283edba6927e2910fd1ebc14fe006']]
-    }))
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        method: 'pong',
+        params: []
+      })
+    )
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        method: 'inventories',
+        params: [['0xd3c89cac4a4283edba6927e2910fd1ebc14fe006']]
+      })
+    )
   })
 })
