@@ -1,28 +1,28 @@
-import type { Event } from "ws";
+import type { Event } from 'ws'
 
-export type SocketEvent = "open" | "close" | "message" | "error";
+export type SocketEvent = 'open' | 'close' | 'message' | 'error'
 
 export enum SubscriptionType {
-  Rates = "rates",
-  Inventories = "inventories",
-  Chains = "chains",
+  Rates = 'rates',
+  Inventories = 'inventories',
+  Chains = 'chains'
 }
 
 export interface Subscription {
-  type: SubscriptionType;
-  data: string[];
+  type: SubscriptionType
+  data: string[]
 }
 
 export interface Settings {
-  reconnect?: Boolean;
+  reconnect?: Boolean
 }
 
 export interface Rates {
-  id: string;
-  data: any;
+  id: string
+  data: any
 }
 
 export interface Listener {
-  method: SocketEvent;
-  handler: (event: Event) => void;
+  method: SocketEvent
+  handler: (event: Event) => void
 }
