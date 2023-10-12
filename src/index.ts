@@ -38,12 +38,7 @@ function createPylon(url: string, opts: ConnectionOpts) {
 
   // public API
   const on = events.on.bind(events)
-  const { connect } = connection
-
-  const close = () => {
-    events.emit('close')
-    connection.close()
-  }
+  const { connect, close } = connection
 
   function activity(accounts: string[]) {
     subscribe(SubscriptionType.Activity, accounts)
