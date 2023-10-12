@@ -1,7 +1,8 @@
-import { EventEmitter } from 'events'
-import WebSocket, { ErrorEvent, MessageEvent } from 'isomorphic-ws'
-
 import log from '@framelabs/logger'
+import { EventEmitter } from 'events'
+import WebSocket from 'isomorphic-ws'
+
+import type { ErrorEvent, MessageEvent } from 'isomorphic-ws'
 
 type ClientMessageType = 'pong' | 'request'
 
@@ -17,7 +18,7 @@ function createSocketConnection(url: string) {
     if (ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify([type, data]))
     } else {
-      log.error(`Pylon not connected when sending ${type}`)
+      log.error(`Socket not connected when sending ${type}`)
     }
   }
 
