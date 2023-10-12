@@ -1,0 +1,14 @@
+{
+  "transform": {
+    "^.+\\.[t|j]sx?$": [
+      "babel-jest",
+      { "configFile": "./test/babel.config.json" }
+    ]
+  },
+  "extensionsToTreatAsEsm": [".ts"],
+  "moduleNameMapper": {
+    "^(\\.\\.?\\/.+)\\.js$": "$1"
+  },
+  "testTimeout": 100,
+  "resetMocks": true
+}
