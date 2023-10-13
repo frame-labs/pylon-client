@@ -1,13 +1,13 @@
 import log from '@framelabs/logger'
-import { EventEmitter } from 'events'
 import WebSocket from 'isomorphic-ws'
+import { EventEmitter } from 'events'
 
 import type { ErrorEvent, MessageEvent } from 'isomorphic-ws'
 
 type ClientMessageType = 'pong' | 'request'
 
 function createSocketConnection(url: string) {
-  log.info(`Connecting to ${url}`)
+  log.debug(`Connecting to ${url}`)
 
   const ws = new WebSocket(url)
   const events = new EventEmitter()
@@ -79,10 +79,15 @@ function createSocketConnection(url: string) {
   ws.onmessage = onMessage
   ws.onerror = onError
 
+  const on = events.on.bind(events)
+  const once = events.once.bind(events)
+  const off = events.off.bind(events)
+
   return {
     close: () => ws.close(),
-    on: events.on.bind(events),
-    off: events.off.bind(events),
+    on,
+    off,
+    once,
     send
   }
 }

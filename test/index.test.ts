@@ -1,157 +1,105 @@
-import { jest } from '@jest/globals'
+import { WebSocket, WebSocketServer } from 'ws'
 
-import { EventEmitter } from 'events'
+import Pylon, { PylonClient } from '../src/index.js'
 
-import createSocket from '../src/connection/ws'
+const port = 21089
+
+let wss: WebSocketServer, client: PylonClient, socket: WebSocket
 
 beforeAll(() => {
-  jest.useRealTimers()
+  wss = new WebSocketServer({ port })
+  client = Pylon(`ws://localhost:${port}`)
+
+  wss.on('connection', (ws) => {
+    socket = ws
+  })
 })
 
-it('test', (done) => {
-  const ws = createSocket('ws://localhost:8089')
-
-  ws.on('close', () => {
-    console.log('event?')
+beforeEach((done) => {
+  client.once('connect', async () => {
+    // wait for initial heartbeat
+    const { event } = await waitForMessageFromClient()
+    expect(event).toBe('pong')
     done()
   })
 
-  setTimeout(() => {
-    console.log('test!')
-    ws.close()
-  }, 2000)
-}, 909090)
+  client.connect()
+})
 
-// jest.unstable_mockModule('ws', () => {
-//   return {
-//     WebSocket: jest.fn()
-//   }
-// })
-// const { WebSocket } = await import('ws')
-// const WS = jest.mocked(WebSocket)
+afterEach((done) => {
+  client.once('close', done)
+  client.close()
+})
 
-// console.log({ WebSocket })
-// let pylon
+afterAll((done) => {
+  wss.close(() => done())
+})
 
-// beforeAll(() => {
-//   WS.mockImplementation(function () {
-//     const e = new EventEmitter()
-//     this.emit = e.emit.bind(e)
-//     this.on = e.on.bind(e)
-//     this.addEventListener = e.addListener.bind(e)
-//     this.removeEventListener = e.removeListener.bind(e)
-//     this.listenerCount = e.listenerCount.bind(e)
-//     this.readyState = 1
+it('connects', () => {
+  expect(client.isConnected()).toBe(true)
+})
 
-//     return this
-//   })
-// })
+it('responds to a server heartbeat', async () => {
+  sendMessageToClient('ping')
 
-// beforeEach(() => {
-//   pylon = new Pylon('wss://data.pylon.link')
-// })
+  const { event } = await waitForMessageFromClient()
 
-// afterEach(() => {
-//   pylon.close()
-// })
+  expect(event).toEqual('pong')
+})
 
-// describe('Database Setup', () => {
-//   it.skip('Connects', (done) => {
-//     const pylon = new Pylon('ws://127.0.0.1:9000', { reconnect: false })
-//     pylon.on('connection', () => {
-//       pylon.disconnect()
-//       pylon.on('close', () => {
-//         done()
-//       })
-//     })
-//   }, 1000)
-// })
+it('subscribes to activity', async () => {
+  client.activity(['0x1234'])
 
-// it('handles reconnecting when the network is not available', () => {
-//   WebSocket.mock.instances[0].emit('error', new Error('could not connect!'))
-//   WebSocket.mock.instances[0].emit('close')
+  const { event, payload } = await waitForMessageFromClient()
 
-//   jest.advanceTimersByTime(5000)
+  expect(event).toBe('request')
+  expect(payload).toStrictEqual({
+    id: 0,
+    method: 'activity',
+    params: ['0x1234']
+  })
+})
 
-//   WebSocket.mock.instances[1].emit('open')
+it('simulates a transaction', async () => {
+  const result = client.simulate({
+    from: '0x1234',
+    to: '0x5678',
+    value: '0xabc',
+    gas: '0xdef'
+  })
 
-//   expect(pylon.connected).toBe(true)
-// })
+  const { event, payload } = await waitForMessageFromClient()
 
-// describe('subscriptions', () => {
-//   it('subscribes to inventories', () => {
-//     pylon.inventories(['0xd3c89cac4a4283edba6927e2910fd1ebc14fe006'])
+  expect(event).toBe('request')
+  expect(payload).toStrictEqual({
+    id: 1,
+    method: 'simulate',
+    params: expect.anything()
+  })
 
-//     const ws = WebSocket.mock.instances[0]
-//     expect(ws.send).toHaveBeenCalledWith(
-//       JSON.stringify({
-//         method: 'inventories',
-//         params: [['0xd3c89cac4a4283edba6927e2910fd1ebc14fe006']]
-//       })
-//     )
-//   })
+  sendMessageToClient('response', {
+    id: 1,
+    result: { success: true, metadata: '0xtest' }
+  })
 
-//   it('subscribes to rates', () => {
-//     pylon.rates([
-//       { chainId: 1, type: AssetType.NativeCurrency },
-//       {
-//         chainId: 1,
-//         type: AssetType.Token,
-//         address: '0xd3c89cac4a4283edba6927e2910fd1ebc14fe006'
-//       },
-//       { chainId: 137, type: AssetType.NativeCurrency }
-//     ])
+  return expect(result).resolves.toStrictEqual({
+    success: true,
+    metadata: '0xtest'
+  })
+})
 
-//     const ws = WebSocket.mock.instances[0]
+// helpers
 
-//     expect(ws.send).toHaveBeenCalledTimes(1)
-//     expect(ws.send).toHaveBeenCalledWith(
-//       JSON.stringify({
-//         method: 'rates',
-//         params: [
-//           [
-//             'eip155:1/slip44:60',
-//             'eip155:1/erc20:0xd3c89cac4a4283edba6927e2910fd1ebc14fe006',
-//             'eip155:137/slip44:60'
-//           ]
-//         ]
-//       })
-//     )
-//   })
+function sendMessageToClient(event: string, payload?: any) {
+  const body = payload ? [event, payload] : [event]
+  socket.send(JSON.stringify(body))
+}
 
-//   it('subscribes to chains', () => {
-//     pylon.chains([1, 137, 1])
-
-//     const ws = WebSocket.mock.instances[0]
-
-//     expect(ws.send).toHaveBeenCalledTimes(1)
-//     expect(ws.send).toHaveBeenCalledWith(
-//       JSON.stringify({
-//         // any duplicate chainIds should be removed
-//         method: 'chains',
-//         params: [['1', '137']]
-//       })
-//     )
-//   })
-
-//   it('stores subscriptions on reconnect', () => {
-//     pylon.inventories(['0xd3c89cac4a4283edba6927e2910fd1ebc14fe006'])
-
-//     const ws = WebSocket.mock.instances[0]
-//     ws.send.mockClear()
-//     ws.emit('open')
-//     expect(ws.send).toHaveBeenCalledTimes(2)
-//     expect(ws.send).toHaveBeenCalledWith(
-//       JSON.stringify({
-//         method: 'pong',
-//         params: []
-//       })
-//     )
-//     expect(ws.send).toHaveBeenCalledWith(
-//       JSON.stringify({
-//         method: 'inventories',
-//         params: [['0xd3c89cac4a4283edba6927e2910fd1ebc14fe006']]
-//       })
-//     )
-//   })
-// })
+async function waitForMessageFromClient() {
+  return new Promise<{ event: string; payload: any }>((resolve) => {
+    socket.once('message', (message) => {
+      const [event, payload] = JSON.parse(message.toString())
+      resolve({ event, payload })
+    })
+  })
+}

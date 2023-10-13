@@ -39,28 +39,31 @@ function createConnection(
 ) {
   let nextId = 1
   let reconnectTimer: NodeJS.Timeout
-  let ws: ReturnType<typeof createSocket>
+  let ws: ReturnType<typeof createSocket> | null
 
+  const events = new EventEmitter()
   const requests = new Map<number, PendingRequest>()
   const clearReconnect = () => clearTimeout(reconnectTimer)
 
-  const events = new EventEmitter()
+  function closeHandler(forced = false) {
+    ws = null
 
-  function closeHandler() {
     events.emit('close')
 
     clearReconnect()
 
-    if (reconnectTimeout) {
-      log.debug(
-        `Connection closed, will re-attempt connection in ${reconnectTimeout}ms`
-      )
+    if (!forced) {
+      if (reconnectTimeout) {
+        log.debug(
+          `Connection closed, will re-attempt connection in ${reconnectTimeout}ms`
+        )
 
-      reconnectTimer = setTimeout(connect, reconnectTimeout)
+        reconnectTimer = setTimeout(connect, reconnectTimeout)
+      }
     }
   }
 
-  function messageHandler(type: ServerMessageType, payload: any) {
+  function messageHandler(type: ServerMessageType, payload: unknown) {
     if (type === 'event') {
       events.emit('data', payload)
     } else if (type === 'response') {
@@ -98,40 +101,43 @@ function createConnection(
   function close() {
     log.debug(`Disconnecting from ${url}`)
 
-    clearReconnect()
+    const finishClose = () => closeHandler(true)
 
-    events.removeAllListeners()
-
-    ws.off('close', closeHandler)
-    ws.close()
+    if (ws) {
+      ws.off('close', closeHandler)
+      ws.once('close', finishClose)
+      ws.close()
+    } else {
+      finishClose()
+    }
   }
 
   // waits for a response
   async function request(method: string, params: any) {
-    if (ws) {
-      return new Promise((respond, reject) => {
-        const requestTimeout = setTimeout(() => {
-          reject(new Error('Request timed out'))
-        }, 30_000)
+    return new Promise((respond, reject) => {
+      const requestTimeout = setTimeout(() => {
+        reject(new Error('Request timed out'))
+      }, 30_000)
 
-        const resolve = (data: unknown) => {
-          clearTimeout(requestTimeout)
-          respond(data)
-        }
+      const resolve = (data: unknown) => {
+        clearTimeout(requestTimeout)
+        respond(data)
+      }
 
-        const id = nextId++
+      const id = nextId++
 
-        requests.set(id, { resolve, reject })
+      requests.set(id, { resolve, reject })
 
+      if (ws) {
         ws.send('request', { id, method, params })
-      })
-    } else {
-      log.error('Pylon not connected when sending RPC request', {
-        method,
-        params
-      })
-      throw new Error('Not connected')
-    }
+      } else {
+        log.error('Pylon not connected when sending RPC request', {
+          method,
+          params
+        })
+        reject(new Error('Not connected'))
+      }
+    })
   }
 
   // sends a message without waiting for response
@@ -145,7 +151,7 @@ function createConnection(
 
   const on = events.on.bind(events)
 
-  return { on, close, connect, send, request }
+  return { on, connect, close, send, request }
 }
 
 export default createConnection

@@ -9,6 +9,6 @@
   "moduleNameMapper": {
     "^(\\.\\.?\\/.+)\\.js$": "$1"
   },
-  "testTimeout": 100,
+  "testTimeout": 200,
   "resetMocks": true
 }
