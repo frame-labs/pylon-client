@@ -1,17 +1,7 @@
 {
   "env": {
     "test": {
-      "presets": [
-        [
-          "@babel/preset-env",
-          {
-            "targets": {
-              "node": "20"
-            }
-          }
-        ],
-        "@babel/preset-typescript"
-      ]
+      "presets": ["@babel/preset-typescript"]
     }
   }
 }

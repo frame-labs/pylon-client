@@ -81,6 +81,11 @@ function createConnection(
           }
 
           requests.delete(id)
+        } else {
+          log.warn('Received response for unknown request', {
+            id,
+            payload: parseResult.data
+          })
         }
       } else {
         log.error('Error parsing response', parseResult.error.issues)
