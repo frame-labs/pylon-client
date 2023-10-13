@@ -3,18 +3,22 @@
   "version": "0.1.0-beta.0",
   "description": "Pylon API Client",
   "type": "module",
-  "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
     "dist/**/*"
   ],
+  "exports": {
+    "require": "./dist/cjs/index.cjs",
+    "import": "./dist/index.js"
+  },
   "scripts": {
     "test": "NODE_OPTIONS=--experimental-vm-modules jest --config ./test/jest.config.json --detectOpenHandles",
     "dev:run-file": "node --loader ts-node/esm",
     "build": "tsc",
+    "build:commonjs": "tsc --module commonjs --target es2020 --declaration false --outdir dist/cjs && ./scripts/convert-to-cjs.sh",
     "watch": "tsc -w",
     "format": "prettier --write src test",
-    "prepare": "npm run build",
+    "prepare": "npm run build && npm run build:commonjs",
     "prepublishOnly": "npm test"
   },
   "author": "Frame Labs, Inc.",
