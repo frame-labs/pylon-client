@@ -15,7 +15,7 @@
     "test": "NODE_OPTIONS=--experimental-vm-modules jest --config ./test/jest.config.json --detectOpenHandles",
     "dev:run-file": "node --loader ts-node/esm",
     "build": "tsc",
-    "build:commonjs": "tsc --module commonjs --target es2020 --declaration false --outdir dist/cjs && ./scripts/convert-to-cjs.sh",
+    "build:commonjs": "tsc --module commonjs --target es2020 --declaration false --outdir dist/cjs && ./scripts/convert-to-cjs.sh ./dist/cjs",
     "watch": "tsc -w",
     "format": "prettier --write src test",
     "prepare": "npm run build && npm run build:commonjs",
