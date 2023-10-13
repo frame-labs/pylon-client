@@ -1,116 +1,99 @@
-import { WebSocket, WebSocketServer } from 'ws'
+import { jest } from '@jest/globals'
+import type Connection from '../src/connection/index.js'
+import { AssetType } from '../src/assetId.js'
 
-import Pylon, { PylonClient } from '../src/index.js'
+jest.unstable_mockModule('../src/connection/index.js', () => ({
+  default: () => connection
+}))
 
-const port = 21089
+const connection: jest.Mocked<ReturnType<typeof Connection>> = {
+  send: jest.fn(),
+  request: jest.fn(),
+  on: jest.fn(),
+  once: jest.fn(),
+  connect: jest.fn(),
+  close: jest.fn()
+}
 
-let server: ReturnType<typeof createServer>, client: PylonClient
-
-beforeAll(() => {
-  server = createServer(port)
-  client = Pylon(`ws://localhost:${port}`)
-})
-
-beforeEach((done) => {
-  client.once('connect', async () => {
-    // wait for initial heartbeat
-    const { event } = await server.waitForMessageFromClient()
-    expect(event).toBe('pong')
-    done()
-  })
-
-  client.connect()
-})
-
-afterEach((done) => {
-  client.once('close', done)
-  client.close()
-})
-
-afterAll((done) => {
-  server.close(() => done())
-})
-
-it('connects', () => {
-  expect(client.isConnected()).toBe(true)
-})
-
-it('responds to a server heartbeat', async () => {
-  server.sendMessageToClient('ping')
-
-  const { event } = await server.waitForMessageFromClient()
-
-  expect(event).toEqual('pong')
-})
+const { default: Pylon } = await import('../src/index.js')
 
 it('subscribes to activity', async () => {
+  const client = Pylon('ws://test')
+
   client.activity(['0x1234'])
 
-  const { event, payload } = await server.waitForMessageFromClient()
+  expect(connection.send).toHaveBeenCalledWith('subscribeActivity', ['0x1234'])
+})
 
-  expect(event).toBe('request')
-  expect(payload).toStrictEqual({
-    id: 0,
-    method: 'activity',
-    params: ['0x1234']
-  })
+it('subscribes to activity for an additional account', () => {
+  const client = Pylon('ws://test')
+
+  client.activity(['0x5678'])
+  client.activity(['0x1234', '0x5678'])
+
+  expect(connection.send).toHaveBeenCalledTimes(2)
+  expect(connection.send).toHaveBeenNthCalledWith(1, 'subscribeActivity', [
+    '0x5678'
+  ])
+
+  expect(connection.send).toHaveBeenNthCalledWith(2, 'subscribeActivity', [
+    '0x1234'
+  ])
+})
+
+it('unsubscribes from activity', () => {
+  const client = Pylon('ws://test')
+
+  client.activity(['0x1234', '0x5678'])
+  client.activity(['0x5678'])
+
+  expect(connection.send).toHaveBeenCalledTimes(2)
+  expect(connection.send).toHaveBeenNthCalledWith(1, 'subscribeActivity', [
+    '0x1234',
+    '0x5678'
+  ])
+
+  expect(connection.send).toHaveBeenNthCalledWith(2, 'unsubscribeActivity', [
+    '0x1234'
+  ])
+})
+
+it('subscribes to tokens', async () => {
+  const client = Pylon('ws://test')
+  client.tokens([
+    {
+      type: AssetType.Token,
+      address: '0x6B175474E89094C44Da98b954EedeAC495271d0F',
+      chainId: 1
+    }
+  ])
+
+  expect(connection.send).toHaveBeenCalledWith('subscribeTokens', [
+    'eip155:1/erc20:0x6B175474E89094C44Da98b954EedeAC495271d0F'
+  ])
 })
 
 it('simulates a transaction', async () => {
-  const result = client.simulate({
+  const client = Pylon('ws://test')
+
+  const tx = {
     from: '0x1234',
     to: '0x5678',
     value: '0xabc',
     gas: '0xdef'
-  })
+  }
 
-  const { event, payload } = await server.waitForMessageFromClient()
-
-  expect(event).toBe('request')
-  expect(payload).toStrictEqual({
-    id: 1,
-    method: 'simulate',
-    params: expect.anything()
-  })
-
-  server.sendMessageToClient('response', {
-    id: 1,
-    result: { success: true, metadata: '0xtest' }
-  })
-
-  return expect(result).resolves.toStrictEqual({
+  connection.request.mockResolvedValueOnce({
     success: true,
     metadata: '0xtest'
   })
-})
 
-// helpers
+  const result = await client.simulate(tx)
 
-function createServer(port: number) {
-  const wss = new WebSocketServer({ port })
-  let socket: WebSocket
-
-  wss.on('connection', (ws) => {
-    socket = ws
+  expect(result).toStrictEqual({
+    success: true,
+    metadata: '0xtest'
   })
 
-  function sendMessageToClient(event: string, payload?: any) {
-    const body = payload ? [event, payload] : [event]
-    socket.send(JSON.stringify(body))
-  }
-
-  async function waitForMessageFromClient() {
-    return new Promise<{ event: string; payload: any }>((resolve) => {
-      socket.once('message', (message) => {
-        const [event, payload] = JSON.parse(message.toString())
-        resolve({ event, payload })
-      })
-    })
-  }
-
-  return {
-    sendMessageToClient,
-    waitForMessageFromClient,
-    close: wss.close.bind(wss)
-  }
-}
+  expect(connection.request).toHaveBeenCalledWith('simulateTransaction', tx)
+})

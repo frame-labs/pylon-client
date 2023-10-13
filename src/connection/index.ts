@@ -33,7 +33,7 @@ type RPCRequest = {
   params: unknown[]
 }
 
-function createConnection(
+function Connection(
   url: string,
   { reconnectTimeout }: Partial<ConnectionOpts> = {}
 ) {
@@ -146,17 +146,18 @@ function createConnection(
   }
 
   // sends a message without waiting for response
-  function send(data: Omit<RPCRequest, 'id'>) {
+  function send(method: string, params: unknown) {
     if (ws) {
-      ws.send('request', { id: 0, ...data })
+      ws.send('request', { id: 0, method, params })
     } else {
-      log.error('Pylon not connected when sending message', data)
+      log.error('Pylon not connected when sending message', { method, params })
     }
   }
 
   const on = events.on.bind(events)
+  const once = events.once.bind(events)
 
-  return { on, connect, close, send, request }
+  return { on, once, connect, close, send, request }
 }
 
-export default createConnection
+export default Connection

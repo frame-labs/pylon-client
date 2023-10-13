@@ -1,8 +1,8 @@
 export enum SubscriptionType {
-  Activity = 'activity',
-  Tokens = 'tokens',
-  Rates = 'rates',
-  Chains = 'chains'
+  Activity = 'Activity',
+  Tokens = 'Tokens',
+  Rates = 'Rates',
+  Chains = 'Chains'
 }
 
 export interface Rates {

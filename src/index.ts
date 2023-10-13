@@ -2,12 +2,17 @@ import log from '@framelabs/logger'
 import TypedEmitter from 'typed-emitter'
 import { EventEmitter } from 'events'
 
-import createConnection from './connection/index.js'
+import Connection from './connection/index.js'
+import { stringify as stringifyAssetId } from './assetId.js'
 import { PylonEventSchema } from './api/events.js'
 import { SubscriptionType } from './types.js'
 
 import type { ConnectionOpts } from './connection/index.js'
 import type { PylonEvent } from './api/events.js'
+import type { AssetId } from './assetId.js'
+
+export { AssetType } from './assetId.js'
+export type PylonClient = ReturnType<typeof createPylon>
 
 type MessageEvents = {
   connect: () => void
@@ -15,12 +20,10 @@ type MessageEvents = {
   data: (body: PylonEvent) => void
 }
 
-export type PylonClient = ReturnType<typeof createPylon>
-
 function createPylon(url: string, opts?: Partial<ConnectionOpts>) {
   let connected = false
 
-  const connection = createConnection(url, opts)
+  const connection = Connection(url, opts)
 
   const events = new EventEmitter() as TypedEmitter<MessageEvents>
   const subscriptions: Map<SubscriptionType, string[]> = new Map()
@@ -49,10 +52,44 @@ function createPylon(url: string, opts?: Partial<ConnectionOpts>) {
     }
   })
 
-  function subscribe(type: SubscriptionType, ids: string[]) {
-    connection.send({ method: type, params: ids })
+  function updateSubscriptions(type: SubscriptionType, ids: string[]) {
+    const existingSubscriptions = subscriptions.get(type) ?? []
+    const existingIds = new Set(existingSubscriptions)
+
+    const { toSubscribe, toUnsubscribe } = ids.reduce(
+      (acc, id) => {
+        if (!existingIds.has(id)) {
+          acc.toSubscribe.add(id)
+        } else {
+          acc.toUnsubscribe.delete(id)
+        }
+
+        return acc
+      },
+      { toSubscribe: new Set<string>(), toUnsubscribe: new Set(existingIds) }
+    )
+
+    // subscribe to all new ids
+    if (toSubscribe.size > 0) {
+      subscribe(type, [...toSubscribe])
+    }
+
+    // unsubscribe from all ids that are no longer in the list
+    if (toUnsubscribe.size > 0) {
+      unsubscribe(type, [...toUnsubscribe])
+    }
 
     subscriptions.set(type, ids)
+  }
+
+  function subscribe(type: SubscriptionType, ids: string[]) {
+    log.debug(`Subscribing to ${type}`, { ids })
+    connection.send(`subscribe${type}`, ids)
+  }
+
+  function unsubscribe(type: SubscriptionType, ids: string[]) {
+    log.debug(`Unsubscribing from ${type}`, { ids })
+    connection.send(`unsubscribe${type}`, ids)
   }
 
   // public API
@@ -62,12 +99,16 @@ function createPylon(url: string, opts?: Partial<ConnectionOpts>) {
   const { connect, close } = connection
 
   function activity(accounts: string[]) {
-    subscribe(SubscriptionType.Activity, accounts)
+    updateSubscriptions(SubscriptionType.Activity, accounts)
+  }
+
+  function tokens(ids: AssetId[]) {
+    updateSubscriptions(SubscriptionType.Tokens, ids.map(stringifyAssetId))
   }
 
   // TODO: will define this object shape later
   async function simulate(tx: any) {
-    const result = await connection.request('simulate', tx)
+    const result = await connection.request('simulateTransaction', tx)
 
     // TODO: use zod to verify object shape here and send response
     // could we possibly pass the schema to request and do it there in a re-usable way?
@@ -83,6 +124,7 @@ function createPylon(url: string, opts?: Partial<ConnectionOpts>) {
     connect,
     close,
     activity,
+    tokens,
     simulate
   }
 }
