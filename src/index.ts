@@ -1,231 +1,132 @@
-import { EventEmitter } from 'events'
-import WebSocket from 'isomorphic-ws'
-
 import log from '@framelabs/logger'
-import { AssetId, parse, stringify } from './assetId'
-import {
-  Subscription,
-  Settings,
-  Rates,
-  SubscriptionType,
-  Listener,
-  SocketEvent
-} from './types'
+import TypedEmitter from 'typed-emitter'
+import { EventEmitter } from 'events'
 
-export { AssetType } from './assetId'
+import Connection from './connection/index.js'
+import { stringify as stringifyAssetId } from './assetId.js'
+import { PylonEventSchema } from './api/events.js'
+import { SubscriptionType } from './types.js'
 
-const RETRY_TIMEOUT = 5000
+import type { ConnectionOpts } from './connection/index.js'
+import type { PylonEvent } from './api/events.js'
+import type { AssetId } from './assetId.js'
 
-function dedupChainIds(uniqueIds: string[], chainId: number) {
-  const id = chainId.toString()
+export { AssetType } from './assetId.js'
+export type PylonClient = ReturnType<typeof createPylon>
 
-  if (!uniqueIds.includes(id)) {
-    uniqueIds.push(id)
-  }
-
-  return uniqueIds
+type MessageEvents = {
+  connect: () => void
+  close: () => void
+  data: (body: PylonEvent) => void
 }
 
-class Pylon extends EventEmitter {
-  // private
-  private ws?: WebSocket
-  private pingTimeout?: NodeJS.Timeout
-  private connectionTimer?: NodeJS.Timer
+function createPylon(url: string, opts?: Partial<ConnectionOpts>) {
+  let connected = false
 
-  private readonly location: string
-  private destroyed: boolean = false
-  private socketListeners: Listener[] = []
+  const connection = Connection(url, opts)
 
-  private readonly subscriptions: Subscription[] = []
-  private readonly settings: Settings
+  const events = new EventEmitter() as TypedEmitter<MessageEvents>
+  const subscriptions: Map<SubscriptionType, string[]> = new Map()
 
-  // public
-  connected: boolean = false
+  connection.on('connect', () => {
+    log.info(`Pylon connected at ${url}`)
 
-  constructor(location: string = '', settings: Settings = {}) {
-    super()
-    this.location = location
-    this.settings = { reconnect: true, ...settings }
-    this.connect()
-  }
+    connected = true
+    events.emit('connect')
+  })
 
-  close() {
-    this.destroyed = true
-    this.clearTimers()
-    if (this.ws && WebSocket && this.ws.readyState !== WebSocket.CLOSED) {
-      this.removeAllSocketListeners()
-      this.addSocketListener('error', () => {})
-      this.addSocketListener('close', this.onClose.bind(this))
+  connection.on('close', () => {
+    log.info(`Pylon disconnected at ${url}`)
 
-      this.disconnect()
+    connected = false
+    events.emit('close')
+  })
+
+  connection.on('data', (event: unknown) => {
+    const parseResult = PylonEventSchema.safeParse(event)
+
+    if (parseResult.success) {
+      events.emit('data', parseResult.data)
     } else {
-      this.onClose()
+      log.warn('Failed to parse incoming event', parseResult.error.issues)
     }
-  }
+  })
 
-  private connect() {
-    log.debug(`connecting to ${this.location}`)
+  function updateSubscriptions(type: SubscriptionType, ids: string[]) {
+    const existingSubscriptions = subscriptions.get(type) ?? []
+    const existingIds = new Set(existingSubscriptions)
 
-    this.ws = new WebSocket(this.location)
+    const { toSubscribe, toUnsubscribe } = ids.reduce(
+      (acc, id) => {
+        if (!existingIds.has(id)) {
+          acc.toSubscribe.add(id)
+        } else {
+          acc.toUnsubscribe.delete(id)
+        }
 
-    this.addSocketListener('open', this.onOpen.bind(this))
-    this.addSocketListener('message', (message) =>
-      this.onMessage(message as WebSocket.MessageEvent)
+        return acc
+      },
+      { toSubscribe: new Set<string>(), toUnsubscribe: new Set(existingIds) }
     )
 
-    this.addSocketListener('error', (e) => {
-      log.warn('received socket error', e)
-      this.onError(e as Error)
-    })
-
-    this.addSocketListener('close', () => {
-      log.debug('received socket close event')
-      this.onClose()
-    })
-  }
-
-  private async disconnect() {
-    log.debug(`disconnecting from ${this.location}`)
-
-    if (this.ws?.terminate) {
-      this.ws?.terminate()
-    } else {
-      this.ws?.close()
+    // subscribe to all new ids
+    if (toSubscribe.size > 0) {
+      subscribe(type, [...toSubscribe])
     }
-  }
 
-  private clearTimers() {
-    if (this.pingTimeout) clearTimeout(this.pingTimeout)
-    if (this.connectionTimer) clearTimeout(this.connectionTimer)
-  }
-
-  private onOpen() {
-    this.heartbeat()
-
-    this.subscriptions.forEach((subscription) => {
-      this.send(subscription.type, subscription.data)
-    })
-
-    this.connected = true
-    this.emit('open')
-  }
-
-  private onClose() {
-    // onClose should only be called as a result of the socket's close event
-    // OR when close() is called manually and the socket either doesn't exist or is already in a closed state
-    this.clearTimers()
-    if (this.ws) {
-      this.removeAllSocketListeners()
-      this.ws = undefined
+    // unsubscribe from all ids that are no longer in the list
+    if (toUnsubscribe.size > 0) {
+      unsubscribe(type, [...toUnsubscribe])
     }
-    this.connected = false
-    this.emit('close')
-    if (this.destroyed) {
-      this.removeAllListeners()
-    } else {
-      if (this.settings.reconnect) {
-        log.debug(
-          `connection closed, will re-attempt connection in ${RETRY_TIMEOUT}ms`
-        )
-        this.connectionTimer = setTimeout(() => this.connect(), RETRY_TIMEOUT)
-      }
-    }
+
+    subscriptions.set(type, ids)
   }
 
-  private onMessage(message: WebSocket.MessageEvent) {
-    try {
-      const [event, ...params] = JSON.parse(message.data.toString())
-
-      if (event === 'ping') {
-        this.heartbeat()
-      } else if (event === 'rates') {
-        const rates = params[0] as Rates[]
-        this.emit(
-          'rates',
-          rates.map(({ id, data }) => ({ id: parse(id), data }))
-        )
-      } else {
-        this.emit(event, ...params)
-      }
-    } catch (e) {
-      log.error('Error parsing message', e)
-    }
+  function subscribe(type: SubscriptionType, ids: string[]) {
+    log.debug(`Subscribing to ${type}`, { ids })
+    connection.send(`subscribe${type}`, ids)
   }
 
-  private onError(err: Error) {
-    if (
-      err.message ===
-      'WebSocket was closed before the connection was established'
-    )
-      return
-    if (this.listenerCount('error') > 0) this.emit('error', err)
+  function unsubscribe(type: SubscriptionType, ids: string[]) {
+    log.debug(`Unsubscribing from ${type}`, { ids })
+    connection.send(`unsubscribe${type}`, ids)
   }
 
-  private addSocketListener(
-    method: SocketEvent,
-    handler: (event: unknown) => void
-  ) {
-    this.ws?.addEventListener(method as any, handler as any)
-    this.socketListeners.push({ method, handler })
+  // public API
+  const on = events.on.bind(events)
+  const once = events.once.bind(events)
+  const off = events.off.bind(events)
+  const { connect, close } = connection
+
+  function activity(accounts: string[]) {
+    updateSubscriptions(SubscriptionType.Activity, accounts)
   }
 
-  private removeAllSocketListeners() {
-    this.socketListeners.forEach(({ method, handler }) => {
-      this.ws?.removeEventListener(method as any, handler)
-    })
-
-    this.socketListeners = []
+  function tokens(ids: AssetId[]) {
+    updateSubscriptions(SubscriptionType.Tokens, ids.map(stringifyAssetId))
   }
 
-  private heartbeat() {
-    this.send('pong')
-    if (this.pingTimeout) clearTimeout(this.pingTimeout)
-    this.pingTimeout = setTimeout(() => this.ws?.close(), 30000 + 2000)
+  // TODO: will define this object shape later
+  async function simulate(tx: any) {
+    const result = await connection.request('simulateTransaction', tx)
+
+    // TODO: use zod to verify object shape here and send response
+    // could we possibly pass the schema to request and do it there in a re-usable way?
+
+    return result
   }
 
-  private send(method: string, ...params: unknown[]) {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ method: method, params: params }))
-    } else {
-      this.onError(new Error(`Pylon not connected when sending ${method}`))
-    }
-  }
-
-  // subscription methods
-  rates(assetIds: AssetId[]) {
-    this.subscribe({
-      type: SubscriptionType.Rates,
-      data: assetIds.map(stringify)
-    })
-  }
-
-  chains(chainIds: number[]) {
-    this.subscribe({
-      type: SubscriptionType.Chains,
-      data: chainIds.reduce(dedupChainIds, [])
-    })
-  }
-
-  inventories(accounts: string[]) {
-    this.subscribe({
-      type: SubscriptionType.Inventories,
-      data: accounts
-    })
-  }
-
-  private subscribe(subscription: Subscription) {
-    this.send(subscription.type, subscription.data)
-
-    // Check subscriptions to see if this type of subscription already exists
-    const existingIndex = this.subscriptions.findIndex(
-      (sub) => sub.type === subscription.type
-    )
-    if (existingIndex !== -1) {
-      this.subscriptions[existingIndex] = subscription
-    } else {
-      this.subscriptions.push(subscription)
-    }
+  return {
+    isConnected: () => connected,
+    on,
+    once,
+    off,
+    connect,
+    close,
+    activity,
+    tokens,
+    simulate
   }
 }
 
-export default Pylon
+export default createPylon
