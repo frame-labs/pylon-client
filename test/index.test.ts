@@ -4,21 +4,17 @@ import Pylon, { PylonClient } from '../src/index.js'
 
 const port = 21089
 
-let wss: WebSocketServer, client: PylonClient, socket: WebSocket
+let server: ReturnType<typeof createServer>, client: PylonClient
 
 beforeAll(() => {
-  wss = new WebSocketServer({ port })
+  server = createServer(port)
   client = Pylon(`ws://localhost:${port}`)
-
-  wss.on('connection', (ws) => {
-    socket = ws
-  })
 })
 
 beforeEach((done) => {
   client.once('connect', async () => {
     // wait for initial heartbeat
-    const { event } = await waitForMessageFromClient()
+    const { event } = await server.waitForMessageFromClient()
     expect(event).toBe('pong')
     done()
   })
@@ -32,7 +28,7 @@ afterEach((done) => {
 })
 
 afterAll((done) => {
-  wss.close(() => done())
+  server.close(() => done())
 })
 
 it('connects', () => {
@@ -40,9 +36,9 @@ it('connects', () => {
 })
 
 it('responds to a server heartbeat', async () => {
-  sendMessageToClient('ping')
+  server.sendMessageToClient('ping')
 
-  const { event } = await waitForMessageFromClient()
+  const { event } = await server.waitForMessageFromClient()
 
   expect(event).toEqual('pong')
 })
@@ -50,7 +46,7 @@ it('responds to a server heartbeat', async () => {
 it('subscribes to activity', async () => {
   client.activity(['0x1234'])
 
-  const { event, payload } = await waitForMessageFromClient()
+  const { event, payload } = await server.waitForMessageFromClient()
 
   expect(event).toBe('request')
   expect(payload).toStrictEqual({
@@ -68,7 +64,7 @@ it('simulates a transaction', async () => {
     gas: '0xdef'
   })
 
-  const { event, payload } = await waitForMessageFromClient()
+  const { event, payload } = await server.waitForMessageFromClient()
 
   expect(event).toBe('request')
   expect(payload).toStrictEqual({
@@ -77,7 +73,7 @@ it('simulates a transaction', async () => {
     params: expect.anything()
   })
 
-  sendMessageToClient('response', {
+  server.sendMessageToClient('response', {
     id: 1,
     result: { success: true, metadata: '0xtest' }
   })
@@ -90,16 +86,31 @@ it('simulates a transaction', async () => {
 
 // helpers
 
-function sendMessageToClient(event: string, payload?: any) {
-  const body = payload ? [event, payload] : [event]
-  socket.send(JSON.stringify(body))
-}
+function createServer(port: number) {
+  const wss = new WebSocketServer({ port })
+  let socket: WebSocket
 
-async function waitForMessageFromClient() {
-  return new Promise<{ event: string; payload: any }>((resolve) => {
-    socket.once('message', (message) => {
-      const [event, payload] = JSON.parse(message.toString())
-      resolve({ event, payload })
-    })
+  wss.on('connection', (ws) => {
+    socket = ws
   })
+
+  function sendMessageToClient(event: string, payload?: any) {
+    const body = payload ? [event, payload] : [event]
+    socket.send(JSON.stringify(body))
+  }
+
+  async function waitForMessageFromClient() {
+    return new Promise<{ event: string; payload: any }>((resolve) => {
+      socket.once('message', (message) => {
+        const [event, payload] = JSON.parse(message.toString())
+        resolve({ event, payload })
+      })
+    })
+  }
+
+  return {
+    sendMessageToClient,
+    waitForMessageFromClient,
+    close: wss.close.bind(wss)
+  }
 }
